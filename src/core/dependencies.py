@@ -6,7 +6,6 @@ from typing import Dict, Any, Optional
 import logging
 from contextlib import asynccontextmanager
 from src.config.settings import settings
-from src.services.database import mongodb_client, database_service
 from src.services.market_data_service import market_data_service
 from src.services import enhanced_nlp_service
 from src.services.investment_analysis import comprehensive_analysis_service
@@ -15,7 +14,6 @@ from src.services.logging_service import logging_service
 from src.services.logging_middleware import monitoring_service
 from src.services.cache_service import global_cache
 from src.mcp.mcp_server import mcp_server
-from src.a2a.handler import a2a_handler
 from src.core.config_manager import config_manager
 
 logger = logging.getLogger(__name__)
@@ -63,9 +61,6 @@ class ServiceContainer:
             
             # Initialize MCP server
             await self._initialize_mcp_server()
-            
-            # Initialize A2A handler
-            await self._initialize_a2a_handler()
             
             # Register services
             self._register_services()
@@ -245,28 +240,9 @@ class ServiceContainer:
             # Don't raise - MCP server failure shouldn't prevent app startup
             logger.warning("Continuing without MCP server")
     
-    async def _initialize_a2a_handler(self):
-        """Initialize A2A protocol handler"""
-        logger.info("Initializing A2A handler...")
-        
-        try:
-            # Initialize A2A handler
-            await a2a_handler.initialize()
-            
-            logger.info("A2A handler initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"A2A handler initialization failed: {e}")
-            # Don't raise - A2A handler failure shouldn't prevent app startup
-            logger.warning("Continuing without A2A handler")
-    
     def _register_services(self):
         """Register all services in the container"""
         self._services = {
-            'database': {
-                'client': mongodb_client,
-                'service': database_service
-            },
             'market_data': market_data_service,
             'nlp': enhanced_nlp_service,
             'analysis': comprehensive_analysis_service,
@@ -274,8 +250,7 @@ class ServiceContainer:
             'logging': logging_service,
             'monitoring': monitoring_service,
             'cache': global_cache,
-            'mcp_server': mcp_server,
-            'a2a_handler': a2a_handler
+            'mcp_server': mcp_server
         }
         
         logger.info(f"Registered {len(self._services)} services")
@@ -311,11 +286,6 @@ class ServiceContainer:
             # Check MCP server health
             mcp_health = mcp_server.get_health_status()
             health_checks.append(('mcp_server', mcp_health.get('status')))
-            
-            # Check A2A handler health
-            a2a_status = a2a_handler.get_handler_status()
-            a2a_health = 'healthy' if a2a_status.get('is_initialized') else 'unhealthy'
-            health_checks.append(('a2a_handler', a2a_health))
             
             # Report health status
             healthy_services = sum(1 for _, status in health_checks if status == 'healthy')
@@ -386,10 +356,6 @@ class ServiceContainer:
         logger.info("Shutting down services...")
         
         try:
-            # Shutdown A2A handler
-            if a2a_handler:
-                await a2a_handler.cleanup()
-            
             # Shutdown MCP server
             if mcp_server:
                 await mcp_server.stop_server()
@@ -423,11 +389,6 @@ service_container = ServiceContainer()
 async def get_service_container() -> ServiceContainer:
     """FastAPI dependency for service container"""
     return service_container
-
-
-async def get_database_service():
-    """FastAPI dependency for database service"""
-    return service_container.get_service('database')['service']
 
 
 async def get_market_data_service():

@@ -13,16 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DatabaseConfig:
-    """Database configuration"""
-    mongodb_url: str
-    mongodb_database: str
-    connection_timeout: int = 5000
-    socket_timeout: int = 5000
-    server_selection_timeout: int = 5000
-
-
-@dataclass
 class APIConfig:
     """API configuration"""
     anthropic_api_key: str
@@ -120,10 +110,6 @@ class ConfigurationManager:
     def _get_default_configuration(self) -> Dict[str, Any]:
         """Get default configuration values"""
         return {
-            "database": asdict(DatabaseConfig(
-                mongodb_url="mongodb://localhost:27017/",
-                mongodb_database="nasdaq_stock_agent"
-            )),
             "api": asdict(APIConfig(
                 anthropic_api_key="",
                 anthropic_model="claude-3-sonnet-20240229"
@@ -169,12 +155,6 @@ class ConfigurationManager:
             "mcp": {},
             "application": {}
         }
-        
-        # Database configuration
-        if settings.mongodb_url:
-            env_config["database"]["mongodb_url"] = settings.mongodb_url
-        if settings.mongodb_database:
-            env_config["database"]["mongodb_database"] = settings.mongodb_database
         
         # API configuration
         if settings.anthropic_api_key:
@@ -248,13 +228,6 @@ class ConfigurationManager:
         if not api_config.get("anthropic_api_key"):
             errors.append("Anthropic API key is required")
         
-        # Validate database configuration
-        db_config = config.get("database", {})
-        if not db_config.get("mongodb_url"):
-            errors.append("MongoDB URL is required")
-        if not db_config.get("mongodb_database"):
-            errors.append("MongoDB database name is required")
-        
         # Validate numeric values
         cache_config = config.get("cache", {})
         if cache_config.get("ttl_seconds", 0) <= 0:
@@ -312,11 +285,6 @@ class ConfigurationManager:
         
         # Save updated configuration
         self.save_configuration(self._config_cache)
-    
-    def get_database_config(self) -> DatabaseConfig:
-        """Get database configuration as dataclass"""
-        db_config = self.get_config_section("database")
-        return DatabaseConfig(**db_config)
     
     def get_api_config(self) -> APIConfig:
         """Get API configuration as dataclass"""
@@ -394,7 +362,6 @@ class ConfigurationManager:
             "config_file_exists": self.config_file.exists(),
             "config_file_path": str(self.config_file),
             "sections": list(self._config_cache.keys()),
-            "database_configured": bool(self.get_config_value("database", "mongodb_url")),
             "api_keys_configured": bool(self.get_config_value("api", "anthropic_api_key")),
             "cache_enabled": self.get_config_value("cache", "ttl_seconds", 0) > 0,
             "rate_limiting_enabled": self.get_config_value("rate_limiting", "requests_per_minute", 0) > 0,

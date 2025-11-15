@@ -303,9 +303,6 @@ class HealthMonitor:
     async def get_system_health(self) -> Dict[str, Any]:
         """Get comprehensive system health status"""
         try:
-            # Get logging service statistics
-            logging_stats = await logging_service.get_logging_statistics()
-            
             # Get performance metrics
             performance_metrics = await performance_monitor.get_metrics()
             
@@ -320,7 +317,6 @@ class HealthMonitor:
                 'service': 'NASDAQ Stock Agent',
                 'version': '1.0.0',
                 'status': health_checks.get('overall_status', 'unknown'),
-                'logging_service': logging_stats,
                 'performance_metrics': performance_metrics,
                 'health_checks': health_checks,
                 'timestamp': datetime.utcnow().isoformat()
@@ -353,39 +349,12 @@ class MonitoringService:
         """Initialize monitoring with health checks"""
         try:
             # Register health checks for various services
-            await self.health_monitor.register_health_check(
-                'database', 
-                self._check_database_health
-            )
-            
-            await self.health_monitor.register_health_check(
-                'logging_service',
-                self._check_logging_service_health
-            )
+            # Database health checks removed - no longer using MongoDB
             
             logger.info("Monitoring service initialized")
             
         except Exception as e:
             logger.error(f"Failed to initialize monitoring: {e}")
-    
-    async def _check_database_health(self) -> Dict[str, Any]:
-        """Check database health"""
-        try:
-            from src.services.database import mongodb_client
-            return await mongodb_client.health_check()
-        except Exception as e:
-            return {'status': 'unhealthy', 'error': str(e)}
-    
-    async def _check_logging_service_health(self) -> Dict[str, Any]:
-        """Check logging service health"""
-        try:
-            stats = await self.logging_service.get_logging_statistics()
-            return {
-                'status': 'healthy' if stats.get('database_health', {}).get('status') == 'healthy' else 'degraded',
-                'stats': stats
-            }
-        except Exception as e:
-            return {'status': 'unhealthy', 'error': str(e)}
     
     async def get_comprehensive_status(self) -> Dict[str, Any]:
         """Get comprehensive system status"""

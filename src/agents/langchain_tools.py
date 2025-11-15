@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from src.services import enhanced_nlp_service
 from src.services.market_data_service import market_data_service
 from src.services.investment_analysis import comprehensive_analysis_service
-from src.services.database import database_service
 
 logger = logging.getLogger(__name__)
 

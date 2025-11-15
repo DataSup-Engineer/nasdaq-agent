@@ -1,12 +1,5 @@
 # Business logic services
 
-from .database import (
-    MongoDBClient,
-    DatabaseService,
-    mongodb_client,
-    database_service
-)
-
 from .yfinance_service import YFinanceService
 
 from .cache_service import (
@@ -63,12 +56,6 @@ from .logging_middleware import (
 )
 
 __all__ = [
-    # Database services
-    "MongoDBClient",
-    "DatabaseService", 
-    "mongodb_client",
-    "database_service",
-    
     # Yahoo Finance services
     "YFinanceService",
     

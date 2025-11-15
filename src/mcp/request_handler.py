@@ -134,22 +134,7 @@ class MCPRequestHandler:
                             except json.JSONDecodeError:
                                 pass
                 
-                if analysis_data:
-                    # Log as analysis request using the existing logging structure
-                    from ..models.logging import AnalysisLogEntry
-                    
-                    log_entry = AnalysisLogEntry(
-                        analysis_id=analysis_data.get('analysis_id', f"mcp_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"),
-                        user_query=f"MCP Tool Call: {parameters.get('company_name_or_ticker', 'unknown')}",
-                        ticker_symbol=analysis_data.get('ticker', 'unknown'),
-                        company_name=analysis_data.get('company_name', 'unknown'),
-                        recommendation=analysis_data.get('recommendation', 'Hold'),
-                        confidence_score=analysis_data.get('confidence_score', 50.0),
-                        processing_time_ms=processing_time_ms
-                    )
-                    
-                    await logging_service.database_service.log_analysis(log_entry)
-                    logger.info(f"MCP analysis logged: {log_entry.analysis_id}")
+                # Analysis data is logged via log_api_request below
             
             # Always log the MCP request itself
             await logging_service.log_api_request(

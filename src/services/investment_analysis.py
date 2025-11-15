@@ -10,8 +10,6 @@ from src.services.claude_client import InvestmentAnalyzer
 from src.services.market_data_service import MarketDataService
 from src.models.market_data import MarketData, PricePoint
 from src.models.analysis import StockAnalysis, InvestmentRecommendation, RecommendationType
-from src.services.database import database_service
-from src.models.logging import AnalysisLogEntry
 
 logger = logging.getLogger(__name__)
 
@@ -206,9 +204,6 @@ class ComprehensiveAnalysisService:
                 processing_time_ms=processing_time
             )
             
-            # 8. Log the analysis
-            await self._log_analysis(stock_analysis)
-            
             logger.info(f"Completed comprehensive analysis for {ticker} in {processing_time}ms")
             return stock_analysis
             
@@ -350,23 +345,7 @@ Risk Assessment: {ai_recommendation.risk_assessment[:100]}{'...' if len(ai_recom
             logger.error(f"Failed to generate comprehensive summary: {e}")
             return f"Analysis summary for {market_data.company_name} could not be generated due to an error."
     
-    async def _log_analysis(self, stock_analysis: StockAnalysis) -> None:
-        """Log the analysis to MongoDB"""
-        try:
-            log_entry = AnalysisLogEntry(
-                analysis_id=stock_analysis.analysis_id,
-                user_query=stock_analysis.query_text,
-                ticker_symbol=stock_analysis.ticker,
-                company_name=stock_analysis.company_name,
-                recommendation=stock_analysis.recommendation.recommendation.value if stock_analysis.recommendation else "Unknown",
-                confidence_score=stock_analysis.recommendation.confidence_score if stock_analysis.recommendation else 0,
-                processing_time_ms=stock_analysis.processing_time_ms
-            )
-            
-            await database_service.log_analysis(log_entry)
-            
-        except Exception as e:
-            logger.error(f"Failed to log analysis for {stock_analysis.ticker}: {e}")
+
     
     async def get_service_health(self) -> Dict[str, Any]:
         """Get health status of the analysis service"""

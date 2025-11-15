@@ -1,18 +1,12 @@
 """
-NEST Integration Module
+NEST Integration for NASDAQ Stock Agent
 
-This module provides integration with the NEST (NANDA Sandbox and Testbed)
-framework for agent-to-agent communication.
+This package provides integration with the NANDA NEST (Network of Autonomous 
+Distributed Agents) framework, enabling agent-to-agent (A2A) communication 
+while maintaining the existing FastAPI REST interface.
 """
 
-from src.nest.adapter import StockAgentNEST
-from src.nest.bridge import StockAgentBridge
-from src.nest.config import NESTConfig
-from src.nest.registry import RegistryClient
+from .config import NESTConfig
+from .adapter import NESTAdapter
 
-__all__ = [
-    'StockAgentNEST',
-    'StockAgentBridge',
-    'NESTConfig',
-    'RegistryClient'
-]
+__all__ = ["NESTConfig", "NESTAdapter"]

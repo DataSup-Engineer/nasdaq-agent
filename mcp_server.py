@@ -73,15 +73,6 @@ class MCPServerRunner:
     async def _initialize_core_services(self):
         """Initialize only the core services needed for MCP"""
         try:
-            # Initialize database
-            from src.services.database import mongodb_client
-            await mongodb_client.connect()
-            
-            # Initialize logging service
-            from src.services.logging_service import logging_service
-            stats = await logging_service.get_logging_statistics()
-            logger.info(f"Logging service initialized: {stats.get('service')}")
-            
             # Initialize agent orchestrator
             from src.agents.stock_analysis_agent import agent_orchestrator
             health = await agent_orchestrator.get_health_status()
@@ -112,14 +103,6 @@ class MCPServerRunner:
         try:
             # Stop MCP server
             await self.server.stop_server()
-            
-            # Cleanup database connection
-            from src.services.database import mongodb_client
-            await mongodb_client.disconnect()
-            
-            # Shutdown logging service
-            from src.services.logging_service import logging_service
-            logging_service.shutdown()
             
             self.running = False
             logger.info("MCP server shutdown complete")

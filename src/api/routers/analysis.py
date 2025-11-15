@@ -57,6 +57,13 @@ async def analyze_stock(
         )
         background_tasks.add_task(performance_monitor.record_analysis)
         
+        # Log the analysis
+        background_tasks.add_task(
+            logging_service.log_analysis_request,
+            request,
+            response
+        )
+        
         logger.info(f"Analysis completed for query: '{request.query}' -> {response.ticker}")
         return response
         

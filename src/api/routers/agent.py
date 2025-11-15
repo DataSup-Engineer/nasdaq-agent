@@ -5,8 +5,6 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
-from src.services.database import database_service
-from src.models.analysis import AgentFactCard
 
 logger = logging.getLogger(__name__)
 
@@ -19,44 +17,73 @@ async def get_agent_info() -> Dict[str, Any]:
     Get NASDAQ Stock Agent information
     
     Returns comprehensive information about the agent including capabilities,
-    specialization, and registry details.
+    specialization, registry details, and NEST integration status.
     """
     try:
-        # Get agent fact card from database
-        agent_card = await database_service.get_agent_fact_card("nasdaq-stock-agent-v1")
+        # Get NEST status
+        nest_enabled = False
+        a2a_endpoint = None
+        nest_agent_id = None
         
-        if not agent_card:
-            # Return default agent information if not found in database
-            return {
-                "agent_id": "nasdaq-stock-agent-v1",
-                "agent_name": "NASDAQ Stock Agent",
-                "agent_domain": "Financial Analysis",
-                "agent_specialization": "NASDAQ Stock Analysis and Investment Recommendations",
-                "agent_description": "AI-powered agent that provides comprehensive stock analysis and investment recommendations for NASDAQ-listed securities using real-time market data and advanced AI analysis.",
-                "agent_capabilities": [
-                    "Natural language stock query processing",
-                    "Real-time NASDAQ market data retrieval",
-                    "6-month historical trend analysis",
-                    "AI-powered investment recommendations (Buy/Hold/Sell)",
-                    "Risk assessment and confidence scoring",
-                    "Company name to ticker symbol resolution",
-                    "Comprehensive logging and audit trails"
-                ],
-                "registry_url": "mongodb://localhost:27017/nasdaq_stock_agent/agent_registry",
-                "public_url": "http://localhost:8000/api/v1",
-                "status": "active",
-                "timestamp": datetime.utcnow().isoformat()
-            }
+        try:
+            from src.api.app import get_nest_adapter
+            
+            nest_adapter = get_nest_adapter()
+            if nest_adapter:
+                nest_status = await nest_adapter.get_status()
+                nest_enabled = nest_status.get("nest_running", False)
+                nest_agent_id = nest_status.get("agent_id")
+                public_url = nest_status.get("public_url")
+                if public_url:
+                    a2a_endpoint = f"{public_url}/a2a"
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Failed to get NEST status: {e}")
         
-        # Convert ObjectId to string if present
-        if '_id' in agent_card:
-            agent_card['_id'] = str(agent_card['_id'])
+        # Build agent info response
+        agent_info = {
+            "agent_id": nest_agent_id if nest_agent_id else "nasdaq-stock-agent",
+            "agent_name": "NASDAQ Stock Agent",
+            "agent_domain": "financial analysis",
+            "agent_specialization": "NASDAQ stock analysis and investment recommendations",
+            "agent_description": "AI-powered agent that provides comprehensive stock analysis and investment recommendations for NASDAQ-listed securities using real-time market data and advanced AI analysis.",
+            "agent_capabilities": [
+                "stock analysis",
+                "ticker resolution",
+                "investment recommendations",
+                "market data",
+                "technical analysis",
+                "fundamental analysis"
+            ],
+            "supported_operations": [
+                {
+                    "operation": "stock_analysis",
+                    "description": "Analyze a stock and provide investment recommendation",
+                    "examples": ["AAPL", "What about Tesla stock?", "Should I buy Microsoft?"]
+                },
+                {
+                    "operation": "ticker_resolution",
+                    "description": "Resolve company name to ticker symbol",
+                    "examples": ["Apple", "Microsoft Corporation", "Tesla Inc"]
+                },
+                {
+                    "operation": "investment_recommendation",
+                    "description": "Get Buy/Hold/Sell recommendation with confidence score",
+                    "examples": ["Recommend AAPL", "Investment advice for TSLA"]
+                }
+            ],
+            "rest_endpoint": "http://localhost:8000/api/v1",
+            "status": "active",
+            "nest_enabled": nest_enabled,
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
-        # Add status and timestamp
-        agent_card['status'] = 'active'
-        agent_card['timestamp'] = datetime.utcnow().isoformat()
+        # Add A2A endpoint if NEST is enabled
+        if a2a_endpoint:
+            agent_info["a2a_endpoint"] = a2a_endpoint
         
-        return agent_card
+        return agent_info
         
     except Exception as e:
         logger.error(f"Failed to get agent info: {e}")

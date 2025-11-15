@@ -18,10 +18,6 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8000, description="Server port")
     
-    # MongoDB Configuration
-    mongodb_url: str = Field(default="mongodb://localhost:27017/", description="MongoDB connection URL")
-    mongodb_database: str = Field(default="nasdaq_stock_agent", description="MongoDB database name")
-    
     # Anthropic API Configuration
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
     anthropic_model: str = Field(default="claude-3-sonnet-20240229", description="Anthropic model to use")

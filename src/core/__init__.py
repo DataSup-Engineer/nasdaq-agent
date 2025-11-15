@@ -5,7 +5,6 @@ from .dependencies import (
     service_container,
     application_lifespan,
     get_service_container,
-    get_database_service,
     get_market_data_service,
     get_nlp_service,
     get_analysis_service,
@@ -16,7 +15,6 @@ from .dependencies import (
 
 from .config_manager import (
     ConfigurationManager,
-    DatabaseConfig,
     APIConfig,
     CacheConfig,
     LoggingConfig,
@@ -33,7 +31,6 @@ __all__ = [
     
     # FastAPI Dependencies
     "get_service_container",
-    "get_database_service",
     "get_market_data_service",
     "get_nlp_service",
     "get_analysis_service",
@@ -43,7 +40,6 @@ __all__ = [
     
     # Configuration Management
     "ConfigurationManager",
-    "DatabaseConfig",
     "APIConfig",
     "CacheConfig",
     "LoggingConfig",

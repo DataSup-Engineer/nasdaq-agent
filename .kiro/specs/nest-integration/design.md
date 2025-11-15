@@ -1,10 +1,8 @@
-# NEST Integration Design Document
+# NEST Integration Design
 
 ## Overview
 
-This design document outlines the integration of the NASDAQ Stock Agent with the NEST (NANDA Sandbox and Testbed) framework. The integration will enable the stock agent to participate in the NANDA agent network, allowing it to communicate with other agents via the A2A (Agent-to-Agent) protocol while maintaining its existing FastAPI functionality.
-
-The integration follows a modular, non-invasive approach that allows the agent to operate in both standalone mode (existing functionality) and NEST mode (with A2A communication).
+This document describes the design for integrating the NASDAQ Stock Agent with the NANDA NEST framework. The design follows Option 1: Minimal Integration, which adds NEST as an additional interface while preserving the existing FastAPI REST API.
 
 ## Architecture
 
@@ -12,572 +10,532 @@ The integration follows a modular, non-invasive approach that allows the agent t
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                   NASDAQ Stock Agent                         │
+│                    NASDAQ Stock Agent                        │
 │                                                              │
-│  ┌────────────────┐         ┌──────────────────┐           │
-│  │  FastAPI App   │         │  NEST Adapter    │           │
-│  │  (Existing)    │         │  (New)           │           │
-│  │                │         │                  │           │
-│  │  /analyze      │         │  A2A Bridge      │           │
-│  │  /health       │         │  Registry Client │           │
-│  │  /history      │         │                  │           │
-│  └────────────────┘         └──────────────────┘           │
-│         │                            │                      │
-│         └────────────┬───────────────┘                      │
-│                      │                                      │
-│         ┌────────────▼────────────┐                        │
-│         │  Analysis Service       │                        │
-│         │  (Shared Core Logic)    │                        │
-│         └─────────────────────────┘                        │
+│  ┌────────────────────┐         ┌─────────────────────┐    │
+│  │   FastAPI Server   │         │   NEST A2A Server   │    │
+│  │    (Port 8000)     │         │    (Port 6000)      │    │
+│  └─────────┬──────────┘         └──────────┬──────────┘    │
+│            │                               │                │
+│            │                               │                │
+│            ├───────────┬───────────────────┤                │
+│            │           │                   │                │
+│  ┌─────────▼───────────▼───────────────────▼──────────┐    │
+│  │         Core Analysis Services                      │    │
+│  │  - comprehensive_analysis_service                   │    │
+│  │  - market_data_service                              │    │
+│  │  - enhanced_nlp_service                             │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-        ▼              ▼              ▼
-  ┌─────────┐   ┌──────────┐   ┌──────────┐
-  │ MongoDB │   │  NANDA   │   │  Other   │
-  │         │   │ Registry │   │  Agents  │
-  └─────────┘   └──────────┘   └──────────┘
+         │                                    │
+         │                                    │
+         ▼                                    ▼
+   REST Clients                      NANDA Registry
+   (curl, web apps)                  (registry.chat39.com:6900)
+                                            │
+                                            ▼
+                                     Other NEST Agents
 ```
 
 ### Component Architecture
 
-The integration consists of three main components:
-
-1. **NEST Adapter** - Wraps the stock agent logic for NEST framework
-2. **A2A Bridge** - Handles incoming/outgoing A2A messages
-3. **Registry Client** - Manages agent registration and discovery
-
-## Components and Interfaces
-
-### 1. NEST Adapter (`src/nest/adapter.py`)
-
-The NEST adapter is the main entry point for NEST integration. It wraps the stock agent's analysis logic and exposes it via the A2A protocol.
-
-```python
-class StockAgentNEST:
-    """NEST adapter for NASDAQ Stock Agent"""
-    
-    def __init__(
-        self,
-        agent_id: str,
-        port: int,
-        registry_url: Optional[str] = None,
-        public_url: Optional[str] = None,
-        enable_telemetry: bool = True
-    ):
-        """Initialize NEST adapter with configuration"""
-        
-    async def agent_logic(self, message: str, conversation_id: str) -> str:
-        """Process incoming A2A messages and return stock analysis"""
-        
-    def start(self, register: bool = True):
-        """Start the NEST agent server"""
-        
-    def stop(self):
-        """Stop the NEST agent and cleanup"""
+```
+src/
+├── nest/                          # NEST integration components
+│   ├── __init__.py
+│   ├── adapter.py                 # NEST adapter (wraps NANDA class)
+│   ├── agent_bridge.py            # A2A message handler
+│   ├── agent_logic.py             # Translates A2A to analysis logic
+│   └── config.py                  # NEST configuration
+├── api/                           # Existing FastAPI application
+│   ├── app.py                     # FastAPI app (unchanged)
+│   └── routers/
+│       ├── agent.py               # Agent facts endpoint (enhanced)
+│       └── ...
+├── services/                      # Core services (unchanged)
+│   ├── investment_analysis.py
+│   ├── market_data_service.py
+│   └── ...
+└── main.py                        # Application entry point (modified)
 ```
 
-**Key Responsibilities:**
-- Initialize NANDA adapter from NEST framework
-- Wrap stock analysis logic for A2A communication
-- Handle agent lifecycle (start, stop, registration)
-- Parse incoming messages to extract stock queries
-- Format analysis results for A2A responses
+## Components
 
-### 2. A2A Bridge (`src/nest/bridge.py`)
+### 1. NEST Configuration (`src/nest/config.py`)
 
-The A2A bridge extends the NEST framework's `SimpleAgentBridge` to handle stock-specific message processing.
+**Purpose:** Manage NEST-specific configuration from environment variables.
+
+**Key Attributes:**
+- `nest_enabled`: Boolean flag to enable/disable NEST
+- `nest_port`: Port for A2A server (default: 6000)
+- `nest_registry_url`: NANDA Registry URL
+- `nest_public_url`: Public URL for agent registration
+- `agent_id`: Unique identifier ("nasdaq-stock-agent")
+- `agent_name`: Display name ("NASDAQ Stock Agent")
+- `domain`: "financial analysis"
+- `specialization`: "NASDAQ stock analysis and investment recommendations"
+
+**Methods:**
+- `from_env()`: Load configuration from environment variables
+- `validate()`: Validate configuration completeness
+- `should_enable_nest()`: Determine if NEST should be enabled
+
+### 2. Agent Logic Adapter (`src/nest/agent_logic.py`)
+
+**Purpose:** Translate A2A messages to stock analysis requests and format responses.
+
+**Key Functions:**
 
 ```python
-class StockAgentBridge(SimpleAgentBridge):
-    """Custom A2A bridge for stock agent"""
+async def process_a2a_message(message: str, conversation_id: str) -> str:
+    """
+    Process incoming A2A message and return response.
     
-    def __init__(
-        self,
-        agent_id: str,
-        analysis_service: ComprehensiveAnalysisService,
-        registry_url: Optional[str] = None,
-        telemetry = None
-    ):
-        """Initialize bridge with analysis service"""
-        
-    async def process_stock_query(self, query: str) -> str:
-        """Process stock query and return formatted response"""
-        
-    def extract_ticker_from_query(self, query: str) -> Optional[str]:
-        """Extract ticker symbol from natural language query"""
-        
-    def format_analysis_response(self, analysis: StockAnalysis) -> str:
-        """Format stock analysis for A2A response"""
+    Handles:
+    - Stock queries: "AAPL", "Apple", "What about Tesla?"
+    - Help commands: "/help", "/info"
+    - Status commands: "/status", "/ping"
+    """
 ```
 
-**Key Responsibilities:**
-- Parse natural language queries to extract ticker symbols
-- Execute stock analysis using existing `ComprehensiveAnalysisService`
-- Format analysis results for A2A protocol
-- Handle errors and edge cases gracefully
-- Support both direct ticker queries and natural language
+**Message Flow:**
+1. Parse incoming A2A message text
+2. Detect message type (stock query, command, etc.)
+3. For stock queries:
+   - Extract ticker/company name using enhanced_nlp_service
+   - Call comprehensive_analysis_service
+   - Format analysis result as readable text
+4. For commands:
+   - Execute command (help, status, etc.)
+   - Return formatted response
+5. Return response string
 
-### 3. Registry Client (`src/nest/registry.py`)
+### 3. Agent Bridge (`src/nest/agent_bridge.py`)
 
-The registry client manages communication with the NANDA agent registry.
+**Purpose:** Implement A2AServer interface from python_a2a library.
+
+**Based on:** NEST's `SimpleAgentBridge` pattern
+
+**Key Methods:**
 
 ```python
-class RegistryClient:
-    """Client for NANDA agent registry"""
+class StockAgentBridge(A2AServer):
+    def handle_message(self, msg: Message) -> Message:
+        """Handle incoming A2A messages"""
+        # 1. Extract text content
+        # 2. Check for special prefixes (@, #, /)
+        # 3. Route to appropriate handler
+        # 4. Return formatted Message response
     
-    def __init__(self, registry_url: str, agent_id: str):
-        """Initialize registry client"""
-        
-    async def register_agent(
-        self,
-        agent_url: str,
-        capabilities: List[str],
-        metadata: Dict[str, Any]
-    ) -> bool:
-        """Register agent with registry"""
-        
-    async def update_status(self, status: str) -> bool:
-        """Update agent status in registry"""
-        
-    async def lookup_agent(self, agent_id: str) -> Optional[str]:
-        """Look up another agent's URL"""
-        
-    async def deregister(self) -> bool:
-        """Remove agent from registry"""
+    def _handle_stock_query(self, query: str, msg: Message, conv_id: str) -> Message:
+        """Handle stock analysis queries"""
+        # Call agent_logic.process_a2a_message()
+        # Format as Message response
+    
+    def _handle_agent_message(self, text: str, msg: Message, conv_id: str) -> Message:
+        """Handle @agent-id messages for A2A communication"""
+        # Parse target agent and message
+        # Look up agent in registry
+        # Forward message using A2AClient
+    
+    def _handle_command(self, text: str, msg: Message, conv_id: str) -> Message:
+        """Handle system commands (/help, /status, etc.)"""
+        # Execute command
+        # Return formatted response
+    
+    def _lookup_agent(self, agent_id: str) -> Optional[str]:
+        """Look up agent URL in NANDA Registry"""
+        # Query registry at {registry_url}/lookup/{agent_id}
+        # Return agent_url or None
+    
+    def _create_response(self, original_msg: Message, conv_id: str, text: str) -> Message:
+        """Create A2A response message"""
+        # Create Message with MessageRole.AGENT
+        # Include parent_message_id
+        # Prefix with [nasdaq-stock-agent]
 ```
 
-**Key Responsibilities:**
-- Register agent with NANDA registry on startup
-- Provide agent metadata (capabilities, domain, etc.)
-- Perform periodic health checks
-- Look up other agents for A2A communication
-- Deregister on shutdown
+### 4. NEST Adapter (`src/nest/adapter.py`)
 
-### 4. Configuration Manager (`src/nest/config.py`)
+**Purpose:** Wrap NANDA class and manage A2A server lifecycle.
 
-Manages NEST-specific configuration from environment variables.
+**Key Methods:**
 
 ```python
-class NESTConfig:
-    """NEST integration configuration"""
-    
-    # Agent Identity
-    agent_id: str
-    agent_name: str
-    domain: str
-    specialization: str
-    
-    # Network Configuration
-    nest_port: int
-    public_url: Optional[str]
-    registry_url: Optional[str]
-    
-    # Feature Flags
-    enable_nest: bool
-    enable_telemetry: bool
-    
-    @classmethod
-    def from_env(cls) -> 'NESTConfig':
-        """Load configuration from environment variables"""
-```
-
-**Environment Variables:**
-- `NEST_ENABLED` - Enable/disable NEST integration (default: false)
-- `NEST_AGENT_ID` - Unique agent identifier (default: "nasdaq-stock-agent")
-- `NEST_AGENT_NAME` - Display name (default: "NASDAQ Stock Agent")
-- `NEST_PORT` - A2A server port (default: 6000)
-- `NEST_PUBLIC_URL` - Public URL for registration
-- `NEST_REGISTRY_URL` - NANDA registry URL
-- `NEST_TELEMETRY` - Enable telemetry (default: true)
-
-### 5. Dual-Mode Launcher (`src/nest/launcher.py`)
-
-Provides a unified entry point that can run the agent in either mode.
-
-```python
-class AgentLauncher:
-    """Unified launcher for standalone and NEST modes"""
-    
+class NESTAdapter:
     def __init__(self, config: NESTConfig):
-        """Initialize launcher with configuration"""
+        """Initialize NEST adapter with configuration"""
+        self.config = config
+        self.bridge = StockAgentBridge(
+            agent_id=config.agent_id,
+            agent_logic=process_a2a_message,
+            registry_url=config.nest_registry_url
+        )
+        self.server_process = None
+    
+    async def start_async(self, register: bool = True):
+        """Start A2A server in background thread"""
+        # Register with NANDA Registry if enabled
+        # Start python_a2a server in separate thread
+        # Monitor server health
+    
+    async def stop_async(self):
+        """Stop A2A server gracefully"""
+        # Deregister from NANDA Registry
+        # Stop server thread
+        # Clean up resources
+    
+    def _register(self):
+        """Register agent with NANDA Registry"""
+        # POST to {registry_url}/register
+        # Payload: {"agent_id": ..., "agent_url": ...}
+        # Retry logic with exponential backoff
+    
+    def _deregister(self):
+        """Deregister agent from NANDA Registry"""
+        # DELETE {registry_url}/agents/{agent_id}
+    
+    async def get_status(self) -> Dict[str, Any]:
+        """Get NEST adapter status"""
+        # Return server status, registration status, etc.
+    
+    def is_running(self) -> bool:
+        """Check if A2A server is running"""
+```
+
+### 5. Main Application Integration (`main.py`)
+
+**Purpose:** Initialize both FastAPI and NEST servers.
+
+**Modifications:**
+
+```python
+# Global NEST adapter instance
+_nest_adapter: Optional[NESTAdapter] = None
+
+async def initialize_nest():
+    """Initialize NEST integration if enabled"""
+    global _nest_adapter
+    
+    try:
+        # Load NEST configuration
+        nest_config = NESTConfig.from_env()
         
-    async def start_standalone(self):
-        """Start in standalone mode (FastAPI only)"""
+        # Check if NEST should be enabled
+        if not nest_config.should_enable_nest():
+            logger.info("NEST integration is disabled")
+            return None
         
-    async def start_nest(self):
-        """Start in NEST mode (A2A + FastAPI)"""
+        # Validate configuration
+        is_valid, errors = nest_config.validate()
+        if not is_valid:
+            logger.error(f"NEST configuration invalid: {errors}")
+            return None
         
-    async def start_dual(self):
-        """Start both FastAPI and NEST servers"""
+        # Create NEST adapter
+        _nest_adapter = NESTAdapter(config=nest_config)
+        
+        # Start NEST adapter
+        await _nest_adapter.start_async(register=True)
+        
+        logger.info(f"NEST adapter started on port {nest_config.nest_port}")
+        return _nest_adapter
+        
+    except ImportError as e:
+        logger.warning(f"NEST integration requires python-a2a: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to initialize NEST: {e}")
+        return None
+
+async def shutdown_nest():
+    """Shutdown NEST integration"""
+    global _nest_adapter
+    
+    if _nest_adapter and _nest_adapter.is_running():
+        await _nest_adapter.stop_async()
+        _nest_adapter = None
+
+# Add to FastAPI lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await initialize_nest()
+    yield
+    # Shutdown
+    await shutdown_nest()
+```
+
+### 6. Enhanced Agent Facts Endpoint
+
+**Purpose:** Provide agent metadata for NEST discovery.
+
+**Enhancements to `src/api/routers/agent.py`:**
+
+```python
+@router.get("/info")
+async def get_agent_info() -> Dict[str, Any]:
+    """Get agent information including NEST metadata"""
+    return {
+        "agent_id": "nasdaq-stock-agent",
+        "agent_name": "NASDAQ Stock Agent",
+        "agent_domain": "Financial Analysis",
+        "agent_specialization": "NASDAQ Stock Analysis and Investment Recommendations",
+        "agent_description": "AI-powered agent that provides comprehensive stock analysis...",
+        "agent_capabilities": [
+            "Natural language stock query processing",
+            "Real-time NASDAQ market data retrieval",
+            "6-month historical trend analysis",
+            "AI-powered investment recommendations (Buy/Hold/Sell)",
+            "Risk assessment and confidence scoring",
+            "Company name to ticker symbol resolution"
+        ],
+        "supported_operations": [
+            {
+                "operation": "stock_analysis",
+                "description": "Analyze a stock and provide investment recommendation",
+                "example": "AAPL" or "What about Tesla stock?"
+            },
+            {
+                "operation": "ticker_resolution",
+                "description": "Resolve company name to ticker symbol",
+                "example": "Apple" -> "AAPL"
+            }
+        ],
+        "a2a_endpoint": f"{public_url}/a2a" if nest_enabled else None,
+        "rest_endpoint": "http://localhost:8000/api/v1",
+        "status": "active",
+        "nest_enabled": nest_enabled,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 ```
 
 ## Data Models
 
 ### A2A Message Format
 
-Incoming A2A messages will follow this structure:
-
+**Incoming Message:**
 ```json
 {
   "role": "user",
   "content": {
-    "text": "What's the analysis for AAPL?",
-    "type": "text"
+    "type": "text",
+    "text": "What do you think about Apple stock?"
   },
   "conversation_id": "conv-123",
-  "metadata": {
-    "from_agent_id": "other-agent",
-    "message_type": "stock_query"
-  }
+  "message_id": "msg-456"
 }
 ```
 
-### A2A Response Format
-
-Outgoing A2A responses will follow this structure:
-
+**Outgoing Response:**
 ```json
 {
   "role": "agent",
   "content": {
-    "text": "[nasdaq-stock-agent] Apple Inc. (AAPL) Analysis:\n\nCurrent Price: $175.50 (+2.3%)\nTechnical: Price above 20-day MA (bullish)\nValuation: Fairly Valued\nAI Recommendation: BUY (Confidence: 75%)\n\nKey Factors: Strong momentum, Positive technical signals, Solid fundamentals",
-    "type": "text"
+    "type": "text",
+    "text": "[nasdaq-stock-agent] Apple Inc. (AAPL) Analysis:\n\nCurrent Price: $178.45 (+1.2%)\nRecommendation: Buy (Confidence: 85%)\n\nKey Factors:\n- Strong upward trend over 6 months\n- Price above key moving averages\n- Solid fundamentals with P/E of 28.5\n\nRisk Assessment: Moderate risk due to high valuation..."
   },
+  "conversation_id": "conv-123",
   "parent_message_id": "msg-456",
-  "conversation_id": "conv-123"
+  "message_id": "msg-789"
 }
 ```
 
-### Agent Metadata
+### Registry Registration Format
 
-Agent registration metadata:
-
+**Registration Request:**
 ```json
 {
   "agent_id": "nasdaq-stock-agent",
-  "agent_name": "NASDAQ Stock Agent",
-  "agent_url": "https://your-domain.com:6000",
-  "domain": "financial analysis",
-  "specialization": "NASDAQ stock analysis and investment recommendations",
-  "capabilities": [
-    "stock_analysis",
-    "technical_analysis",
-    "fundamental_analysis",
-    "investment_recommendations",
-    "market_data"
-  ],
-  "description": "AI-powered stock analysis agent providing comprehensive investment analysis for NASDAQ stocks",
-  "status": "healthy",
-  "version": "1.0.0"
+  "agent_url": "http://your-public-ip:6000/a2a",
+  "api_url": "http://your-public-ip:8000/api/v1",
+  "agent_facts_url": "http://your-public-ip:8000/api/v1/agent/info"
 }
 ```
 
-## Message Processing Flow
+## Configuration
 
-### Incoming A2A Message Flow
+### Environment Variables
 
-```mermaid
-sequenceDiagram
-    participant OtherAgent
-    participant A2ABridge
-    participant TickerExtractor
-    participant AnalysisService
-    participant MongoDB
-    
-    OtherAgent->>A2ABridge: A2A Message: "Analyze AAPL"
-    A2ABridge->>TickerExtractor: Extract ticker from query
-    TickerExtractor-->>A2ABridge: "AAPL"
-    A2ABridge->>AnalysisService: perform_complete_analysis("AAPL")
-    AnalysisService->>MongoDB: Fetch historical data
-    MongoDB-->>AnalysisService: Market data
-    AnalysisService->>AnalysisService: Technical analysis
-    AnalysisService->>AnalysisService: Fundamental analysis
-    AnalysisService->>AnalysisService: AI recommendation
-    AnalysisService-->>A2ABridge: StockAnalysis object
-    A2ABridge->>A2ABridge: Format for A2A response
-    A2ABridge-->>OtherAgent: A2A Response with analysis
-```
+```bash
+# NEST Integration
+NEST_ENABLED=true                                    # Enable NEST integration
+NEST_PORT=6000                                       # A2A server port
+NEST_REGISTRY_URL=http://registry.chat39.com:6900   # NANDA Registry URL
+NEST_PUBLIC_URL=http://your-public-ip:6000          # Public A2A endpoint
 
-### Outgoing A2A Message Flow
+# Agent Identity
+NEST_AGENT_ID=nasdaq-stock-agent                    # Unique agent identifier
+NEST_AGENT_NAME=NASDAQ Stock Agent                  # Display name
+NEST_DOMAIN=financial analysis                      # Domain of expertise
+NEST_SPECIALIZATION=NASDAQ stock analysis and investment recommendations
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant StockAgent
-    participant RegistryClient
-    participant OtherAgent
-    
-    User->>StockAgent: "@financial-advisor Should I buy AAPL?"
-    StockAgent->>RegistryClient: lookup_agent("financial-advisor")
-    RegistryClient-->>StockAgent: agent_url
-    StockAgent->>OtherAgent: A2A Message with AAPL analysis
-    OtherAgent-->>StockAgent: A2A Response with advice
-    StockAgent-->>User: Combined response
+# Existing Configuration (unchanged)
+ANTHROPIC_API_KEY=sk-ant-...
+PORT=8000
 ```
 
 ## Error Handling
 
-### Error Categories
+### Error Scenarios
 
-1. **Configuration Errors**
-   - Missing required environment variables
-   - Invalid configuration values
-   - Action: Log error, fall back to standalone mode
+1. **NEST Initialization Failure**
+   - Log error with details
+   - Continue with REST-only mode
+   - Set nest_status to "disabled"
 
-2. **Registry Errors**
-   - Registry unavailable
-   - Registration failed
-   - Action: Log warning, continue without registry
+2. **Registry Registration Failure**
+   - Retry up to 3 times with exponential backoff (1s, 2s, 4s)
+   - Log warning if all retries fail
+   - Continue operation (agent still works, just not discoverable)
 
-3. **Analysis Errors**
-   - Invalid ticker symbol
-   - Market data unavailable
-   - Action: Return error message in A2A format
+3. **A2A Message Processing Error**
+   - Catch exception in agent_logic
+   - Return error message in A2A format
+   - Log error with stack trace
+   - Don't crash the server
 
-4. **Communication Errors**
-   - Target agent not found
-   - Connection timeout
-   - Action: Return error message to user
+4. **Agent Lookup Failure**
+   - Return "Agent {agent-id} not found" message
+   - Log warning
+   - Suggest using /list command to see available agents
 
-### Error Response Format
-
-```python
-{
-    "role": "agent",
-    "content": {
-        "text": "[nasdaq-stock-agent] ❌ Error: Invalid ticker symbol 'XYZ'. Please provide a valid NASDAQ ticker.",
-        "type": "text"
-    },
-    "conversation_id": "conv-123"
-}
-```
+5. **python_a2a Not Installed**
+   - Detect ImportError during initialization
+   - Log warning about missing dependency
+   - Disable NEST features
+   - Continue with REST-only mode
 
 ## Testing Strategy
 
 ### Unit Tests
 
-1. **Ticker Extraction Tests**
-   - Test various query formats
-   - Test edge cases (multiple tickers, invalid input)
-   - Test natural language queries
-
-2. **Message Formatting Tests**
-   - Test A2A message parsing
-   - Test response formatting
-   - Test error message formatting
-
-3. **Configuration Tests**
-   - Test environment variable loading
-   - Test default values
+1. **NESTConfig Tests**
+   - Test configuration loading from environment
    - Test validation logic
+   - Test should_enable_nest() conditions
+
+2. **Agent Logic Tests**
+   - Test stock query parsing
+   - Test command handling
+   - Test response formatting
+   - Test error handling
+
+3. **Agent Bridge Tests**
+   - Test message routing
+   - Test A2A message creation
+   - Test agent lookup
+   - Test error responses
 
 ### Integration Tests
 
-1. **A2A Communication Tests**
-   - Test message send/receive
-   - Test conversation tracking
-   - Test timeout handling
+1. **NEST Adapter Tests**
+   - Test server startup/shutdown
+   - Test registry registration
+   - Test concurrent FastAPI + A2A operation
 
-2. **Registry Integration Tests**
-   - Test agent registration
-   - Test agent lookup
-   - Test status updates
-
-3. **Analysis Integration Tests**
-   - Test end-to-end stock analysis via A2A
-   - Test error handling
-   - Test concurrent requests
+2. **End-to-End Tests**
+   - Test A2A stock query flow
+   - Test @agent-id forwarding
+   - Test command execution
+   - Test error scenarios
 
 ### Manual Testing
 
 1. **Local Testing**
-   - Start agent in NEST mode
-   - Send test A2A messages using curl
-   - Verify responses
+   ```bash
+   # Start agent with NEST enabled
+   NEST_ENABLED=true NEST_PORT=6000 python main.py
+   
+   # Test A2A endpoint
+   curl -X POST http://localhost:6000/a2a \
+     -H "Content-Type: application/json" \
+     -d '{"content":{"text":"AAPL","type":"text"},"role":"user","conversation_id":"test"}'
+   ```
 
-2. **Multi-Agent Testing**
-   - Deploy multiple agents
-   - Test agent-to-agent communication
-   - Test registry lookup
+2. **Registry Integration Testing**
+   - Register with actual NANDA Registry
+   - Verify agent appears in registry listing
+   - Test agent lookup from another agent
+   - Test deregistration on shutdown
 
-3. **Load Testing**
-   - Test concurrent A2A requests
-   - Monitor performance metrics
-   - Verify resource usage
+## Security Considerations
 
-## Deployment Considerations
+1. **Input Validation**
+   - Validate all A2A message content
+   - Sanitize user input before processing
+   - Prevent injection attacks
 
-### Standalone Mode (Existing)
+2. **Rate Limiting**
+   - Apply same rate limits to A2A as REST API
+   - Track requests per conversation_id
+   - Implement backpressure if overloaded
 
-```bash
-# Run FastAPI server only
-python main.py
-```
+3. **Authentication** (Future Enhancement)
+   - Consider adding agent-to-agent authentication
+   - Verify sender identity in A2A messages
+   - Use signed messages for sensitive operations
 
-### NEST Mode
+## Performance Considerations
 
-```bash
-# Run A2A server only
-export NEST_ENABLED=true
-export NEST_AGENT_ID=nasdaq-stock-agent
-export NEST_PORT=6000
-export NEST_REGISTRY_URL=http://registry.example.com:6900
-export NEST_PUBLIC_URL=https://your-domain.com:6000
-python -m src.nest.launcher
-```
+1. **Concurrent Operation**
+   - Run A2A server in separate thread
+   - Use asyncio for non-blocking operations
+   - Share service instances between FastAPI and NEST
 
-### Dual Mode
+2. **Resource Management**
+   - Reuse existing service instances
+   - Don't duplicate analysis logic
+   - Clean up resources on shutdown
 
-```bash
-# Run both FastAPI and A2A servers
-export NEST_ENABLED=true
-export NEST_DUAL_MODE=true
-python -m src.nest.launcher
-```
+3. **Monitoring**
+   - Track A2A request count and latency
+   - Monitor registry connection health
+   - Alert on NEST failures
+
+## Deployment
 
 ### Docker Deployment
 
 ```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# Install NEST dependencies
-RUN pip install python-a2a
-
-COPY . .
-
 # Expose both ports
 EXPOSE 8000 6000
 
-# Start in dual mode
-CMD ["python", "-m", "src.nest.launcher"]
+# Install python-a2a
+RUN pip install python-a2a
+
+# Set NEST environment variables
+ENV NEST_ENABLED=true
+ENV NEST_PORT=6000
+ENV NEST_REGISTRY_URL=http://registry.chat39.com:6900
 ```
 
-### AWS Deployment
+### AWS EC2 Deployment
 
-Use NEST framework's deployment scripts:
+1. Open security group for port 6000
+2. Set NEST_PUBLIC_URL to EC2 public IP
+3. Configure environment variables
+4. Start application with NEST enabled
 
-```bash
-bash scripts/aws-single-agent-deployment.sh \
-  "nasdaq-stock-agent" \
-  "$ANTHROPIC_API_KEY" \
-  "NASDAQ Stock Agent" \
-  "financial analysis" \
-  "stock analysis specialist" \
-  "AI-powered stock analysis for NASDAQ stocks" \
-  "stock_analysis,technical_analysis,investment_recommendations" \
-  "$SMITHERY_API_KEY" \
-  "http://registry.example.com:6900" \
-  "https://mcp-registry.example.com" \
-  "6000" \
-  "us-east-1" \
-  "t3.micro"
-```
+## Future Enhancements
 
-## Performance Considerations
+1. **MCP Integration**
+   - Add MCP server support using NEST's mcp_client
+   - Enable #nanda:server-name queries
+   - Integrate with MCP registry
 
-### Caching Strategy
+2. **Advanced A2A Features**
+   - Support for multi-turn conversations
+   - Context preservation across messages
+   - Streaming responses for long analyses
 
-- Reuse existing cache service for market data
-- Cache A2A responses for identical queries (5-minute TTL)
-- Cache registry lookups (1-hour TTL)
+3. **Agent Collaboration**
+   - Forward complex queries to specialized agents
+   - Aggregate responses from multiple agents
+   - Implement agent workflows
 
-### Concurrency
-
-- Use asyncio for non-blocking A2A communication
-- Limit concurrent analysis requests (existing rate limiting)
-- Use connection pooling for registry communication
-
-### Resource Usage
-
-- A2A server: Minimal overhead (~10MB memory)
-- Shared analysis service: No additional overhead
-- Total: ~5-10% increase in resource usage
-
-## Security Considerations
-
-### Authentication
-
-- Registry communication: Optional API key authentication
-- A2A messages: Trust-based (within NANDA network)
-- FastAPI endpoints: Existing authentication (if any)
-
-### Input Validation
-
-- Validate all incoming A2A messages
-- Sanitize ticker symbols
-- Limit message size (max 10KB)
-- Rate limit A2A requests (100/minute per agent)
-
-### Data Privacy
-
-- Do not log sensitive user data
-- Anonymize conversation IDs in logs
-- Follow existing data retention policies
-
-## Monitoring and Observability
-
-### Metrics
-
-- A2A message count (incoming/outgoing)
-- Analysis request latency
-- Registry health status
-- Error rates by type
-
-### Logging
-
-- Log all A2A messages (debug level)
-- Log registry operations (info level)
-- Log errors with full context (error level)
-- Use existing logging service
-
-### Health Checks
-
-```python
-{
-    "service": "NEST Integration",
-    "status": "healthy",
-    "nest_enabled": true,
-    "registry_connected": true,
-    "a2a_server_running": true,
-    "last_registry_check": "2024-11-12T10:30:00Z",
-    "message_count_24h": 150
-}
-```
-
-## Migration Path
-
-### Phase 1: Development (Week 1)
-- Implement NEST adapter and bridge
-- Add configuration management
-- Write unit tests
-
-### Phase 2: Integration (Week 2)
-- Integrate with existing analysis service
-- Add registry client
-- Write integration tests
-
-### Phase 3: Testing (Week 3)
-- Local testing with test agents
-- Multi-agent testing
-- Performance testing
-
-### Phase 4: Deployment (Week 4)
-- Deploy to staging environment
-- Monitor and tune performance
-- Deploy to production
-
-## Rollback Plan
-
-If issues arise:
-
-1. **Immediate**: Disable NEST via environment variable
-2. **Short-term**: Revert to previous deployment
-3. **Long-term**: Fix issues and redeploy
-
-The modular design ensures that disabling NEST has no impact on existing FastAPI functionality.
+4. **Telemetry**
+   - Integrate NEST's telemetry system
+   - Track A2A message metrics
+   - Monitor agent network health
